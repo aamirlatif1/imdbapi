@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -43,8 +44,12 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data any, h
 	return nil
 }
 
-func (app *application) readJSON(r *http.Request, dest interface{}) error {
-	err := json.NewDecoder(r.Body).Decode(dest)
+func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dest any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+
+	err := dec.Decode(dest)
 	if err != nil {
 		var syntaxError *json.SyntaxError
 		var unmarshalTypeError *json.UnmarshalTypeError
@@ -57,7 +62,7 @@ func (app *application) readJSON(r *http.Request, dest interface{}) error {
 		case errors.Is(err, io.ErrUnexpectedEOF):
 			return errors.New("body contains badly-formed JSON")
 
-		case errors.As(err, &invalidUnmarshalFieldError):
+		case errors.As(err, &unmarshalTypeError):
 			if unmarshalTypeError.Field != "" {
 				return fmt.Errorf("body contains incorrect JSON type for field %q", unmarshalTypeError.Field)
 			}
@@ -66,12 +71,22 @@ func (app *application) readJSON(r *http.Request, dest interface{}) error {
 		case errors.Is(err, io.EOF):
 			return errors.New("body must not be empty")
 
-		case errors.As(err, &unmarshalTypeError):
+		case errors.As(err, &invalidUnmarshalFieldError):
 			panic(err)
+
+		case strings.HasPrefix(err.Error(), "json: unknown field "):
+			fieldName := strings.TrimPrefix(err.Error(), "json: unknown field ")
+			return fmt.Errorf("body contains unknown field %q", fieldName)
 
 		default:
 			return err
 		}
 	}
+
+	err = dec.Decode(&struct{}{})
+	if err != io.EOF {
+		return errors.New("body must only contain a single JSON value")
+	}
+
 	return nil
 }
