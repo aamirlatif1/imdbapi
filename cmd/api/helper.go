@@ -1,8 +1,11 @@
 package main
 
 import (
-	"encoding/json/v2"
+	"encoding/json"
+	json2 "encoding/json/v2"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -20,7 +23,7 @@ func (app *application) readIDParam(r *http.Request) (int64, error) {
 }
 
 func (app *application) writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
-	js, err := json.Marshal(data)
+	js, err := json2.Marshal(data)
 	if err != nil {
 		return err
 	}
@@ -37,5 +40,38 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data any, h
 	w.WriteHeader(status)
 	w.Write(js)
 
+	return nil
+}
+
+func (app *application) readJSON(r *http.Request, dest interface{}) error {
+	err := json.NewDecoder(r.Body).Decode(dest)
+	if err != nil {
+		var syntaxError *json.SyntaxError
+		var unmarshalTypeError *json.UnmarshalTypeError
+		var invalidUnmarshalFieldError *json.InvalidUnmarshalError
+
+		switch {
+		case errors.As(err, &syntaxError):
+			return fmt.Errorf("body contains badly-formed JSON (at character %d)", syntaxError.Offset)
+
+		case errors.Is(err, io.ErrUnexpectedEOF):
+			return errors.New("body contains badly-formed JSON")
+
+		case errors.As(err, &invalidUnmarshalFieldError):
+			if unmarshalTypeError.Field != "" {
+				return fmt.Errorf("body contains incorrect JSON type for field %q", unmarshalTypeError.Field)
+			}
+			return fmt.Errorf("body contains incorrect JSON type (at character %d)", unmarshalTypeError.Offset)
+
+		case errors.Is(err, io.EOF):
+			return errors.New("body must not be empty")
+
+		case errors.As(err, &unmarshalTypeError):
+			panic(err)
+
+		default:
+			return err
+		}
+	}
 	return nil
 }
