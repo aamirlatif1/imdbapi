@@ -1,0 +1,46 @@
+
+services:
+#  api:
+#    build: .
+#    ports:
+#      - "8080:8080"
+#    depends_on:
+#      migrator:
+#        condition: service_completed_successfully
+#    env_file: .env
+#    environment:
+#      - DB_HOST=database
+
+  database:
+    image: postgres:18
+    volumes:
+      - pgdata:/var/lib/postgresql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=imdbuser --dbname=imdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file: .env
+    environment:
+      - POSTGRES_USER=imdbuser
+      - POSTGRES_PASSWORD=imdbpassword
+      - POSTGRES_DB=imdb
+  
+  migrator:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.migrator
+    depends_on:
+      database:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_MIGRATION_DIR: /migrations
+      GOOSE_DBSTRING: "postgres://imdbuser:imdbpassword@imdb:5432/imdb?sslmode=disable"
+
+volumes:
+  pgdata:

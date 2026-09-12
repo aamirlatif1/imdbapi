@@ -1,0 +1,12 @@
+FROM golang:1.27-alpine as builder
+
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest
+
+FROM golang:1.27-alpine
+
+RUN apk add --no-cache postgresql-client
+
+COPY --from=builder /go/bin/goose /usr/local/bin/goose
+
+ENTRYPOINT ["sh", "-c"]
+CMD ["until pg_isready -h database -U imdbuser; do sleep 1; done && exec goose up"]

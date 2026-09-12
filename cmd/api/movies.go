@@ -24,20 +24,16 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	movie := &data.Movie{
+		Title:   in.Title,
+		Year:    in.Year,
+		Runtime: in.Runtime,
+		Genres:  in.Genres,
+	}
+
 	v := validator.New()
-	v.Check(in.Title != "", "title", "required")
-	v.Check(len(in.Title) <= 500, "title", "must not be larger than 500 bytes")
 
-	v.Check(in.Runtime > 0, "runtime", "must be larger than 0")
-
-	v.Check(in.Year != 0, "year", "must be larger than 0")
-	v.Check(in.Year > 1888, "year", "must not be larger than 1888 bytes")
-
-	v.Check(in.Genres != nil, "runtime", "must be provided")
-	v.Check(len(in.Genres) > 0, "genres", "must not be empty")
-	v.Check(len(in.Genres) <= 5, "genres", "must not be more than 5")
-
-	if !v.Valid() {
+	if data.ValidateMovie(v, movie); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
