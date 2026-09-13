@@ -19,5 +19,5 @@ func (app *application) routes(pool *pgxpool.Pool) http.Handler {
 
 	handlers.NewMovies(store.NewMovies(pool)).Register(router)
 
-	return handlers.RecoverPanic(router)
+	return handlers.RecoverPanic(handlers.RateLimit(router))
 }
