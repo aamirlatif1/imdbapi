@@ -27,14 +27,13 @@ func NewMovies(s MovieStore) *Movies {
 	}
 }
 
-type input struct {
-	Title   string   `json:"title"`
-	Year    int32    `json:"year"`
-	Runtime int32    `json:"runtime"`
-	Genres  []string `json:"genres"`
-}
-
 func (m *Movies) Create(w http.ResponseWriter, r *http.Request) {
+	type input struct {
+		Title   string   `json:"title"`
+		Year    int32    `json:"year"`
+		Runtime int32    `json:"runtime"`
+		Genres  []string `json:"genres"`
+	}
 	var in input
 	err := readJSON(w, r, &in)
 	if err != nil {
@@ -80,10 +79,19 @@ func (m *Movies) Show(w http.ResponseWriter, r *http.Request) {
 		badRequestResponse(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, movie, nil)
+	err = writeJSON(w, http.StatusOK, movie, nil)
+	if err != nil {
+		serverErrorResponse(w, r, err)
+	}
 }
 
 func (m *Movies) Update(w http.ResponseWriter, r *http.Request) {
+	type input struct {
+		Title   *string  `json:"title"`
+		Year    *int32   `json:"year"`
+		Runtime *int32   `json:"runtime"`
+		Genres  []string `json:"genres"`
+	}
 	id, err := readIDParam(r)
 
 	if err != nil {
@@ -103,14 +111,23 @@ func (m *Movies) Update(w http.ResponseWriter, r *http.Request) {
 		badRequestResponse(w, r, err)
 		return
 	}
-	movie.Runtime = in.Runtime
-	movie.Title = in.Title
-	movie.Year = in.Year
-	movie.Genres = in.Genres
+	if in.Title != nil {
+		movie.Title = *in.Title
+	}
+	if in.Year != nil {
+		movie.Year = *in.Year
+	}
+	if in.Runtime != nil {
+		movie.Runtime = *in.Runtime
+	}
+	if in.Genres != nil {
+		movie.Genres = in.Genres
+	}
 
 	v := validator.New()
 	if store.ValidateMovie(v, movie); !v.Valid() {
 		failedValidationResponse(w, r, v.Errors)
+		return
 	}
 	saved, err := m.store.Update(r.Context(), movie)
 	if err != nil {
@@ -121,8 +138,25 @@ func (m *Movies) Update(w http.ResponseWriter, r *http.Request) {
 	err = writeJSON(w, http.StatusOK, saved, headers)
 }
 
+func (m *Movies) Delete(w http.ResponseWriter, r *http.Request) {
+	id, err := readIDParam(r)
+	if err != nil {
+		NotFoundResponse(w, r)
+	}
+	err = m.store.Delete(r.Context(), id)
+	if err != nil {
+		badRequestResponse(w, r, err)
+		return
+	}
+	err = writeJSON(w, http.StatusOK, envelope{"message": "movie successfully deleted"}, nil)
+	if err != nil {
+		serverErrorResponse(w, r, err)
+	}
+}
+
 func (m *Movies) Register(router *mux.Router) {
 	router.HandleFunc("/v1/movies", m.Create).Methods(http.MethodPost)
 	router.HandleFunc("/v1/movies/{id}", m.Show).Methods(http.MethodGet)
-	router.HandleFunc("/v1/movies/{id}", m.Update).Methods(http.MethodPut)
+	router.HandleFunc("/v1/movies/{id}", m.Update).Methods(http.MethodPatch)
+	router.HandleFunc("/v1/movies/{id}", m.Delete).Methods(http.MethodDelete)
 }

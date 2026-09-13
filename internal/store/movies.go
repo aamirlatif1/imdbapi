@@ -88,6 +88,14 @@ func (m Movies) Update(ctx context.Context, movie *Movie) (*Movie, error) {
 }
 
 func (m Movies) Delete(ctx context.Context, id int64) error {
+	query := `delete from movies where id = $1`
+	result, err := m.db.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("deleting movie failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.New("movie not found")
+	}
 	return nil
 }
 
