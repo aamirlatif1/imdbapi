@@ -9,7 +9,7 @@ func (app *application) heathHandler(w http.ResponseWriter, r *http.Request) {
 
 	data := envelope{
 		"status":      "available",
-		"environment": app.config.env,
+		"environment": app.config.Env,
 		"version":     version,
 	}
 

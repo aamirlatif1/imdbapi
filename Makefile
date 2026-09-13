@@ -48,3 +48,6 @@ docker_up:
 help : Makefile
 	@sed -n 's/^##//p' $<
 	@echo ""
+
+run:
+	go run ./cmd/api

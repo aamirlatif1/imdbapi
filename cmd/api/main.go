@@ -1,37 +1,35 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/aamirlatif1/imdbapi/internal/config"
+	"github.com/joho/godotenv"
 )
 
 const version = "1.0.0"
 
-type config struct {
-	port int
-	env  string
-}
-
 type envelope map[string]any
 
 type application struct {
-	config config
+	config config.Config
 	logger *slog.Logger
 }
 
 func main() {
 
-	var cfg config
-
-	flag.IntVar(&cfg.port, "port", 4000, "API server port")
-	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
-	flag.Parse()
-
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	_ = godotenv.Load()
+
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error(err.Error())
+	}
 
 	app := &application{
 		config: cfg,
@@ -39,7 +37,7 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
+		Addr:         fmt.Sprintf(":%s", cfg.HTTPPort),
 		Handler:      app.routes(),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  5 * time.Minute,
@@ -47,9 +45,9 @@ func main() {
 		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
-	logger.Info("starting server", "addr", srv.Addr, "env", cfg.env)
+	logger.Info("starting server", "addr", srv.Addr, "env", cfg.Env)
 
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	logger.Error(err.Error())
 	os.Exit(1)
 }
