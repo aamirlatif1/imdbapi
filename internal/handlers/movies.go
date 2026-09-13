@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/aamirlatif1/imdbapi/internal/store"
 	"github.com/aamirlatif1/imdbapi/internal/validator"
@@ -27,14 +27,14 @@ func NewMovies(s MovieStore) *Movies {
 	}
 }
 
-func (m *Movies) Create(w http.ResponseWriter, r *http.Request) {
-	type input struct {
-		Title   string   `json:"title"`
-		Year    int32    `json:"year"`
-		Runtime int32    `json:"runtime"`
-		Genres  []string `json:"genres"`
-	}
+type input struct {
+	Title   string   `json:"title"`
+	Year    int32    `json:"year"`
+	Runtime int32    `json:"runtime"`
+	Genres  []string `json:"genres"`
+}
 
+func (m *Movies) Create(w http.ResponseWriter, r *http.Request) {
 	var in input
 	err := readJSON(w, r, &in)
 	if err != nil {
@@ -59,32 +59,70 @@ func (m *Movies) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		badRequestResponse(w, r, err)
 	}
-	writeJSON(w, http.StatusCreated, saved, nil)
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", saved.ID))
+	err = writeJSON(w, http.StatusCreated, saved, headers)
+	if err != nil {
+		serverErrorResponse(w, r, err)
+	}
 }
 
 func (m *Movies) Show(w http.ResponseWriter, r *http.Request) {
 	id, err := readIDParam(r)
 
 	if err != nil {
-		http.NotFound(w, r)
+		NotFoundResponse(w, r)
 		return
 	}
 
-	movie := store.Movie{
-		ID:        id,
-		CreatedAt: time.Now(),
-		Title:     "Casablanca",
-		Runtime:   120,
-		Genres:    []string{"drama", "romance", "war"},
-		Version:   1,
-	}
-	err = writeJSON(w, http.StatusOK, movie, nil)
+	movie, err := m.store.Get(r.Context(), id)
 	if err != nil {
-		serverErrorResponse(w, r, err)
+		badRequestResponse(w, r, err)
+		return
 	}
+	writeJSON(w, http.StatusOK, movie, nil)
+}
+
+func (m *Movies) Update(w http.ResponseWriter, r *http.Request) {
+	id, err := readIDParam(r)
+
+	if err != nil {
+		NotFoundResponse(w, r)
+		return
+	}
+
+	movie, err := m.store.Get(r.Context(), id)
+	if err != nil {
+		badRequestResponse(w, r, err)
+		return
+	}
+
+	var in input
+	err = readJSON(w, r, &in)
+	if err != nil {
+		badRequestResponse(w, r, err)
+		return
+	}
+	movie.Runtime = in.Runtime
+	movie.Title = in.Title
+	movie.Year = in.Year
+	movie.Genres = in.Genres
+
+	v := validator.New()
+	if store.ValidateMovie(v, movie); !v.Valid() {
+		failedValidationResponse(w, r, v.Errors)
+	}
+	saved, err := m.store.Update(r.Context(), movie)
+	if err != nil {
+		badRequestResponse(w, r, err)
+	}
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", saved.ID))
+	err = writeJSON(w, http.StatusOK, saved, headers)
 }
 
 func (m *Movies) Register(router *mux.Router) {
 	router.HandleFunc("/v1/movies", m.Create).Methods(http.MethodPost)
 	router.HandleFunc("/v1/movies/{id}", m.Show).Methods(http.MethodGet)
+	router.HandleFunc("/v1/movies/{id}", m.Update).Methods(http.MethodPut)
 }

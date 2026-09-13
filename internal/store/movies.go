@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aamirlatif1/imdbapi/internal/validator"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -21,24 +22,24 @@ type Movie struct {
 	Version   int32     `json:"version"`          // The version number starts at 1 and will be incremented each
 }
 
-const returningQuery = "id, title, year, runtime, genres, created_at, version"
+const movieColumns = "id, title, year, runtime, genres, created_at, version"
 
 type Movies struct {
-	DB *pgxpool.Pool
+	db *pgxpool.Pool
 }
 
 func NewMovies(db *pgxpool.Pool) *Movies {
 	return &Movies{
-		DB: db,
+		db: db,
 	}
 }
 
 func (m Movies) Add(ctx context.Context, movie *Movie) (*Movie, error) {
 	const query = `INSERT INTO movies (title, year, runtime, genres)
 					VALUES ($1, $2, $3, $4)
-					RETURNING ` + returningQuery
+					RETURNING ` + movieColumns
 
-	row := m.DB.QueryRow(ctx, query, movie.Title, movie.Year, movie.Runtime, movie.Genres)
+	row := m.db.QueryRow(ctx, query, movie.Title, movie.Year, movie.Runtime, movie.Genres)
 
 	out, err := scanMovie(row)
 
@@ -53,18 +54,17 @@ func (m Movies) Add(ctx context.Context, movie *Movie) (*Movie, error) {
 	return &out, nil
 }
 
-type scanner interface {
-	Scan(dest ...any) error
-}
-
-func scanMovie(row scanner) (Movie, error) {
-	var m Movie
-	err := row.Scan(&m.ID, &m.Title, &m.Year, &m.Runtime, &m.Genres, &m.CreatedAt, &m.Version)
-	return m, err
-}
-
 func (m Movies) Get(ctx context.Context, id int64) (*Movie, error) {
-	return nil, nil
+	query := `SELECT ` + movieColumns + ` FROM movies WHERE id = $1`
+
+	movie, err := scanMovie(m.db.QueryRow(ctx, query, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("movie not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting movie failed: %w", err)
+	}
+	return &movie, nil
 }
 
 func (m Movies) List(ctx context.Context, limit, offset int32) ([]Movie, error) {
@@ -72,7 +72,19 @@ func (m Movies) List(ctx context.Context, limit, offset int32) ([]Movie, error) 
 }
 
 func (m Movies) Update(ctx context.Context, movie *Movie) (*Movie, error) {
-	return nil, nil
+	query := `update movies set title = $1, year = $2, runtime = $3, genres = $4, version = version + 1
+				where id = $5
+				returning ` + movieColumns
+	row := m.db.QueryRow(ctx, query, movie.Title, movie.Year, movie.Runtime, movie.Genres, movie.ID)
+	out, err := scanMovie(row)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, errors.New("movie not found")
+		}
+		return nil, fmt.Errorf("updating movie failed: %w", err)
+	}
+	return &out, nil
 }
 
 func (m Movies) Delete(ctx context.Context, id int64) error {
@@ -92,4 +104,14 @@ func ValidateMovie(v *validator.Validator, movie *Movie) {
 	v.Check(len(movie.Genres) > 0, "genres", "must not be empty")
 	v.Check(len(movie.Genres) <= 5, "genres", "must not be more than 5")
 	v.Check(validator.Unique(movie.Genres), "genres", "must not contain duplicates")
+}
+
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanMovie(row scanner) (Movie, error) {
+	var m Movie
+	err := row.Scan(&m.ID, &m.Title, &m.Year, &m.Runtime, &m.Genres, &m.CreatedAt, &m.Version)
+	return m, err
 }
