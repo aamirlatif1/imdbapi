@@ -1,6 +1,7 @@
 package data
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/aamirlatif1/imdbapi/internal/validator"
@@ -29,4 +30,30 @@ func ValidateMovie(v *validator.Validator, movie *Movie) {
 	v.Check(len(movie.Genres) > 0, "genres", "must not be empty")
 	v.Check(len(movie.Genres) <= 5, "genres", "must not be more than 5")
 	v.Check(validator.Unique(movie.Genres), "genres", "must not contain duplicates")
+}
+
+type Movies struct {
+	DB *sql.DB
+}
+
+func NewMovies(db *sql.DB) *Movies {
+	return &Movies{
+		DB: db,
+	}
+}
+
+func (m Movies) Add(movie *Movie) error {
+	return nil
+}
+
+func (m Movies) Get(id int64) (*Movie, error) {
+	return nil, nil
+}
+
+func (m Movies) Update(movie *Movie) error {
+	return nil
+}
+
+func (m Movies) Delete(id int64) error {
+	return nil
 }

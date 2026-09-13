@@ -12,10 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const version = "1.0.0"
-
-type envelope map[string]any
-
 type application struct {
 	config config.Config
 	logger *slog.Logger

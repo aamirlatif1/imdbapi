@@ -8,5 +8,5 @@ RUN apk add --no-cache postgresql-client
 
 COPY --from=builder /go/bin/goose /usr/local/bin/goose
 
-ENTRYPOINT ["sh", "-c"]
-CMD ["until pg_isready -h database -U imdbuser; do sleep 1; done && exec goose up"]
+ENTRYPOINT ["goose"]
+CMD ["up"]

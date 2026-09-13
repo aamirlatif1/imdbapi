@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"fmt"
@@ -9,7 +9,10 @@ import (
 	"github.com/aamirlatif1/imdbapi/internal/validator"
 )
 
-func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Request) {
+type Movies struct {
+}
+
+func (app *Movies) Create(w http.ResponseWriter, r *http.Request) {
 	type input struct {
 		Title   string   `json:"title"`
 		Year    int32    `json:"year"`
@@ -18,9 +21,9 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	var in input
-	err := app.readJSON(w, r, &in)
+	err := readJSON(w, r, &in)
 	if err != nil {
-		app.badRequestResponse(w, r, err)
+		badRequestResponse(w, r, err)
 		return
 	}
 
@@ -34,14 +37,14 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 	v := validator.New()
 
 	if data.ValidateMovie(v, movie); !v.Valid() {
-		app.failedValidationResponse(w, r, v.Errors)
+		failedValidationResponse(w, r, v.Errors)
 		return
 	}
 	fmt.Fprintf(w, "%+v\n", in)
 }
 
-func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := app.readIDParam(r)
+func (app *Movies) Show(w http.ResponseWriter, r *http.Request) {
+	id, err := readIDParam(r)
 
 	if err != nil {
 		http.NotFound(w, r)
@@ -56,8 +59,8 @@ func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request)
 		Genres:    []string{"drama", "romance", "war"},
 		Version:   1,
 	}
-	err = app.writeJSON(w, http.StatusOK, movie, nil)
+	err = writeJSON(w, http.StatusOK, movie, nil)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		serverErrorResponse(w, r, err)
 	}
 }

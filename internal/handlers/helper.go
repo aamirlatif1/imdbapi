@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func (app *application) readIDParam(r *http.Request) (int64, error) {
+func readIDParam(r *http.Request) (int64, error) {
 	params := mux.Vars(r)
 
 	id, err := strconv.ParseInt(params["id"], 10, 64)
@@ -23,7 +23,7 @@ func (app *application) readIDParam(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-func (app *application) writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
+func writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
 	js, err := json2.Marshal(data)
 	if err != nil {
 		return err
@@ -44,7 +44,7 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data any, h
 	return nil
 }
 
-func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dest any) error {
+func readJSON(w http.ResponseWriter, r *http.Request, dest any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()

@@ -40,7 +40,7 @@ services:
     environment:
       GOOSE_DRIVER: postgres
       GOOSE_MIGRATION_DIR: /migrations
-      GOOSE_DBSTRING: "postgres://imdbuser:imdbpassword@imdb:5432/imdb?sslmode=disable"
+      GOOSE_DBSTRING: "postgres://imdbuser:imdbpassword@database:5432/imdb?sslmode=disable"
 
 volumes:
   pgdata:

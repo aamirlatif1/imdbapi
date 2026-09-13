@@ -22,22 +22,22 @@ test:
 ## migration_status: checks the database migration status
 .PHONY: migration_status
 migration_status:
-	docker compose run migrator status
+	docker compose run --rm migrator status
 
 ## migration: creates a new database migration. Usage: make migration name=test
 .PHONY: migration
 migration:
-	docker compose run migrator create $(name) sql
+	docker compose run --rm migrator create $(name) sql
 
 ## migrate: runs the the migrations
 .PHONY: migrate
 migrate:
-	docker compose run migrator up
+	docker compose run --rm migrator up
 
 ## migrate_down: downs the migration
 .PHONY: migrate_down
 migrate_down:
-	docker compose run migrator down
+	docker compose run --rm migrator down
 
 ## docker_up: boostrap the environment via Docker
 .PHONY: docker_up
