@@ -41,7 +41,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.HTTPPort),
-		Handler:      app.routes(),
+		Handler:      app.routes(pool),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  5 * time.Minute,
 		WriteTimeout: 10 * time.Minute,

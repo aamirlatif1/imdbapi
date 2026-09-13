@@ -1,18 +1,33 @@
 package handlers
 
 import (
-	"fmt"
+	"context"
 	"net/http"
 	"time"
 
-	"github.com/aamirlatif1/imdbapi/internal/data"
+	"github.com/aamirlatif1/imdbapi/internal/store"
 	"github.com/aamirlatif1/imdbapi/internal/validator"
+	"github.com/gorilla/mux"
 )
 
+type MovieStore interface {
+	Add(ctx context.Context, movie *store.Movie) (*store.Movie, error)
+	Get(ctx context.Context, id int64) (*store.Movie, error)
+	List(ctx context.Context, limit, offset int32) ([]store.Movie, error)
+	Update(ctx context.Context, movie *store.Movie) (*store.Movie, error)
+	Delete(ctx context.Context, id int64) error
+}
 type Movies struct {
+	store MovieStore
 }
 
-func (app *Movies) Create(w http.ResponseWriter, r *http.Request) {
+func NewMovies(s MovieStore) *Movies {
+	return &Movies{
+		store: s,
+	}
+}
+
+func (m *Movies) Create(w http.ResponseWriter, r *http.Request) {
 	type input struct {
 		Title   string   `json:"title"`
 		Year    int32    `json:"year"`
@@ -27,7 +42,7 @@ func (app *Movies) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	movie := &data.Movie{
+	movie := &store.Movie{
 		Title:   in.Title,
 		Year:    in.Year,
 		Runtime: in.Runtime,
@@ -36,14 +51,18 @@ func (app *Movies) Create(w http.ResponseWriter, r *http.Request) {
 
 	v := validator.New()
 
-	if data.ValidateMovie(v, movie); !v.Valid() {
+	if store.ValidateMovie(v, movie); !v.Valid() {
 		failedValidationResponse(w, r, v.Errors)
 		return
 	}
-	fmt.Fprintf(w, "%+v\n", in)
+	saved, err := m.store.Add(r.Context(), movie)
+	if err != nil {
+		badRequestResponse(w, r, err)
+	}
+	writeJSON(w, http.StatusCreated, saved, nil)
 }
 
-func (app *Movies) Show(w http.ResponseWriter, r *http.Request) {
+func (m *Movies) Show(w http.ResponseWriter, r *http.Request) {
 	id, err := readIDParam(r)
 
 	if err != nil {
@@ -51,7 +70,7 @@ func (app *Movies) Show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	movie := data.Movie{
+	movie := store.Movie{
 		ID:        id,
 		CreatedAt: time.Now(),
 		Title:     "Casablanca",
@@ -63,4 +82,9 @@ func (app *Movies) Show(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		serverErrorResponse(w, r, err)
 	}
+}
+
+func (m *Movies) Register(router *mux.Router) {
+	router.HandleFunc("/v1/movies", m.Create).Methods(http.MethodPost)
+	router.HandleFunc("/v1/movies/{id}", m.Show).Methods(http.MethodGet)
 }
