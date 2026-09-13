@@ -12,6 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+var (
+	ErrRecordNotFound = errors.New("record not found")
+	ErrEditConflict   = errors.New("edit conflict")
+)
+
 type Movie struct {
 	ID        int64     `json:"id"`               // Unique integer ID for the movie
 	CreatedAt time.Time `json:"-"`                // Timestamp for when the movie is added to our database
@@ -39,7 +44,10 @@ func (m Movies) Add(ctx context.Context, movie *Movie) (*Movie, error) {
 					VALUES ($1, $2, $3, $4)
 					RETURNING ` + movieColumns
 
-	row := m.db.QueryRow(ctx, query, movie.Title, movie.Year, movie.Runtime, movie.Genres)
+	qctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	row := m.db.QueryRow(qctx, query, movie.Title, movie.Year, movie.Runtime, movie.Genres)
 
 	out, err := scanMovie(row)
 
@@ -57,9 +65,12 @@ func (m Movies) Add(ctx context.Context, movie *Movie) (*Movie, error) {
 func (m Movies) Get(ctx context.Context, id int64) (*Movie, error) {
 	query := `SELECT ` + movieColumns + ` FROM movies WHERE id = $1`
 
-	movie, err := scanMovie(m.db.QueryRow(ctx, query, id))
+	qctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	movie, err := scanMovie(m.db.QueryRow(qctx, query, id))
+
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, errors.New("movie not found")
+		return nil, ErrRecordNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting movie failed: %w", err)
@@ -73,11 +84,19 @@ func (m Movies) List(ctx context.Context, limit, offset int32) ([]Movie, error) 
 
 func (m Movies) Update(ctx context.Context, movie *Movie) (*Movie, error) {
 	query := `update movies set title = $1, year = $2, runtime = $3, genres = $4, version = version + 1
-				where id = $5
+				where id = $5 and version = $6
 				returning ` + movieColumns
-	row := m.db.QueryRow(ctx, query, movie.Title, movie.Year, movie.Runtime, movie.Genres, movie.ID)
+
+	qctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	row := m.db.QueryRow(qctx, query, movie.Title, movie.Year, movie.Runtime, movie.Genres, movie.ID, movie.Version)
 	out, err := scanMovie(row)
+
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEditConflict
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return nil, errors.New("movie not found")
@@ -89,7 +108,10 @@ func (m Movies) Update(ctx context.Context, movie *Movie) (*Movie, error) {
 
 func (m Movies) Delete(ctx context.Context, id int64) error {
 	query := `delete from movies where id = $1`
-	result, err := m.db.Exec(ctx, query, id)
+	qctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	result, err := m.db.Exec(qctx, query, id)
 	if err != nil {
 		return fmt.Errorf("deleting movie failed: %w", err)
 	}

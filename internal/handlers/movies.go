@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/aamirlatif1/imdbapi/internal/store"
 	"github.com/aamirlatif1/imdbapi/internal/validator"
@@ -101,8 +103,20 @@ func (m *Movies) Update(w http.ResponseWriter, r *http.Request) {
 
 	movie, err := m.store.Get(r.Context(), id)
 	if err != nil {
-		badRequestResponse(w, r, err)
+		switch {
+		case errors.Is(err, store.ErrRecordNotFound):
+			NotFoundResponse(w, r)
+		default:
+			serverErrorResponse(w, r, err)
+		}
 		return
+	}
+
+	if r.Header.Get("X-Expected-Version") != "" {
+		if strconv.Itoa(int(movie.Version)) != r.Header.Get("X-Expected-Version") {
+			editConflictResponse(w, r)
+			return
+		}
 	}
 
 	var in input
@@ -131,11 +145,20 @@ func (m *Movies) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, err := m.store.Update(r.Context(), movie)
 	if err != nil {
-		badRequestResponse(w, r, err)
+		switch {
+		case errors.Is(err, store.ErrEditConflict):
+			editConflictResponse(w, r)
+		default:
+			serverErrorResponse(w, r, err)
+		}
+		return
 	}
 	headers := make(http.Header)
 	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", saved.ID))
 	err = writeJSON(w, http.StatusOK, saved, headers)
+	if err != nil {
+		serverErrorResponse(w, r, err)
+	}
 }
 
 func (m *Movies) Delete(w http.ResponseWriter, r *http.Request) {
