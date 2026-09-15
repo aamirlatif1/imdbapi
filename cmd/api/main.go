@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/aamirlatif1/imdbapi/internal/config"
@@ -39,20 +41,48 @@ func main() {
 		logger: logger,
 	}
 
+	err = app.serve(pool)
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+
+}
+
+func (app *application) serve(pool *pgxpool.Pool) error {
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.HTTPPort),
+		Addr:         fmt.Sprintf(":%s", app.config.HTTPPort),
 		Handler:      app.routes(pool),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  5 * time.Minute,
 		WriteTimeout: 10 * time.Minute,
-		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
+		ErrorLog:     slog.NewLogLogger(app.logger.Handler(), slog.LevelError),
 	}
 
-	logger.Info("starting server", "addr", srv.Addr, "env", cfg.Env)
+	shutdown := make(chan error)
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		s := <-quit
 
-	err = srv.ListenAndServe()
-	logger.Error(err.Error())
-	os.Exit(1)
+		app.logger.Info(fmt.Sprintf("received signal %s", s.String()))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		shutdown <- srv.Shutdown(ctx)
+	}()
+
+	app.logger.Info("starting server", "addr", srv.Addr, "env", app.config.Env)
+
+	err := srv.ListenAndServe()
+	app.logger.Error(err.Error())
+
+	err = <-shutdown
+	if err != nil {
+		return err
+	}
+	app.logger.Info("stopped server")
+	return nil
 }
 
 func dbConnectionPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
